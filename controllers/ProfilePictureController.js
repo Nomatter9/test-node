@@ -5,16 +5,15 @@ const path = require("path");
 class ProfilePictureController {
   async uploadProfilePicture(req, res) {
     try {
-      if (!req.file) {
+      if (!req.file && !req.body.user_id) {
         return res.status(400).json({
           success: false,
-          message: "No file uploaded",
+          message: "No file uploaded, please check if user is selected"
         });
       }
-
+console.log(req.body)
       const filePath = `/uploads/${req.file.filename}`;
-      const userId = req.user?.id || 1; // use actual user ID from auth
-
+      const userId = req.body.user_id || 1; // use actual user ID from auth
       // Get existing profile picture
       const [rows] = await db.query(
         "SELECT profile_picture FROM users WHERE id = ?",

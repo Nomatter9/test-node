@@ -5,19 +5,43 @@ const bcrypt = require('bcryptjs');
 class UserController {
   // Get all Users
   async index(req, res) {
-    try {
-   
-      const [rows] = await db.query('SELECT id,name,email,created_at,role,country FROM users ORDER BY id DESC');
-      res.json({ success: true, data: rows });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ 
-        success: false, 
-        message: 'Error fetching users' 
 
-      });
+    const { query, limit } = req.query;
+     const validLimit = [5, 10,15, 20]
+      if(!validLimit.includes(Number(limit))){
+        return res.status(500).json({
+      success: false,
+      message: "Invalid limit"
+    });
+      }
+  try {
+    let sql = "SELECT id, name, email, created_at, role, country, profile_picture FROM users";
+    let params = [];
+
+    if (query) {
+  sql += " WHERE name LIKE ? OR email LIKE ? OR role LIKE ?";
+  params.push(`%${query}%`, `%${query}%`, `%${query}%`);
+}
+
+
+    sql += " ORDER BY id DESC";
+    if (limit) {
+      sql += " LIMIT ?";
+    params.push(Number(limit));  
     }
+// sql += " OFFSET 5 ";
+    const [rows] = await db.query(sql, params);
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching users"
+    });
   }
+}
+
   //delete
    async destroy(req, res) {
     try {

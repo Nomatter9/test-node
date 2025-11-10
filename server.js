@@ -38,6 +38,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/users',usersRoutes);
 app.use('/api/upload-profile-picture',usersProfileRoutes);
+app.use('/uploads', express.static('uploads'));
 
 // 404 handler
 app.use((req, res) => {
