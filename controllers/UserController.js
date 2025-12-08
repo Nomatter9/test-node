@@ -1,10 +1,20 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
+const os = require('os');
+const process = require('process');
+const User = require('../models/user');
+const {Op} = require('sequelize')
 
 
 class UserController {
   // Get all Users
   async index(req, res) {
+// console.log(os.platform());
+// console.log((os.totalmem()/(1024 * 1024 *1024)).toFixed(2));
+// console.log(os.freemem());
+// console.log(os.userInfo());
+// console.log(process.pid);
+// console.log(process.version);
 
     const { query, limit } = req.query;
      const validLimit = [5, 10,15, 20]
@@ -15,24 +25,20 @@ class UserController {
     });
       }
   try {
-    let sql = "SELECT id, name, email, created_at, role, country, profile_picture FROM users";
-    let params = [];
-
-    if (query) {
-  sql += " WHERE name LIKE ? OR email LIKE ? OR role LIKE ?";
-  params.push(`%${query}%`, `%${query}%`, `%${query}%`);
+    const where = {}
+      if (query) {
+        where[Op.or] = [
+          {name: {[Op.like]: `%${query}%` }},
+          {email: {[Op.like]: `%${query}%` }},
+          {role: {[Op.like]: `%${query}%` }}
+        ]
 }
+  const users = await User.findAll({
+        where,
+        limit: parseInt(limit)
+  })
 
-
-    sql += " ORDER BY id DESC";
-    if (limit) {
-      sql += " LIMIT ?";
-    params.push(Number(limit));  
-    }
-// sql += " OFFSET 5 ";
-    const [rows] = await db.query(sql, params);
-
-    res.json({ success: true, data: rows });
+    res.json({ success: true, data: users});
   } catch (error) {
     console.error(error);
     res.status(500).json({
@@ -42,25 +48,23 @@ class UserController {
   }
 }
 
+
   //delete
    async destroy(req, res) {
     try {
-      const { id } = req.params;
-       const [user] = await db.query('SELECT role FROM users WHERE id = ?', [id]);
-    
-    if (user.length > 0 && user[0].role?.toLowerCase() === 'superadmin') {
+   const { id } = req.params;
+    const user = await User.findByPk(id)
+     if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+    if (user && user.role?.toLowerCase() === 'superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Cannot delete superadmin account',
       });
     }
-
-      const [result] = await db.query('DELETE FROM users WHERE id = ?', [id]);
-
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, message: 'User not found' });
-      }
-
+    await user.destroy()
+     
       res.json({ success: true, message: 'User deleted successfully' });
     } catch (error) {
       console.error(error);
@@ -82,16 +86,29 @@ class UserController {
         });
       }
 
+      const existingUser = await User.findOne({
+        where: {email}
+      })
+      if(existingUser){
+          res.status(201).json({
+        success: false,
+        message: 'Email already taken',
+      });
+      }
       // Example: Insert user (hash password in real-world)
-      const [result] = await db.query(
-        'INSERT INTO users (name, email, password, role, country) VALUES (?, ?, ?, ?, ?)',
-        [name, email, hashedPassword, role || 'user', country || null]
-      );
+      const user = await User.create({
+        name,
+        email,
+        password: hashedPassword,
+        role: role || "User",
+        country: country || null
+      })
+
 
       res.status(201).json({
         success: true,
         message: 'User created successfully',
-        userId: result.insertId,
+        userId: user.id,
       });
     } catch (error) {
       console.error(error);
@@ -101,7 +118,6 @@ class UserController {
       });
     }
   }
-
   // UPDATE: Modify existing user
   async update(req, res) {
     try {
@@ -114,19 +130,21 @@ class UserController {
           message: 'Name and email are required',
         });
       }
-
-      const [result] = await db.query(
-        'UPDATE users SET name = ?, email = ?, role = ?, country = ? WHERE id = ?',
-        [name, email, role, country, id]
-      );
-
-      if (result.affectedRows === 0) {
+     
+     const [affectedRows] = await User.update({
+      name,
+      email,
+      role,
+      country
+     },
+     {where:{id}}
+    )
+      if (affectedRows === 0) {
         return res.status(404).json({
           success: false,
           message: 'User not found',
         });
       }
-
       res.json({ success: true, message: 'User updated successfully' });
     } catch (error) {
       console.error(error);

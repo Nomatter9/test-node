@@ -109,7 +109,7 @@ async register(req, res) {
 
       // Generate JWT token
       const token = jwt.sign(
-        { id: user.id, email: user.email },
+        { id: user.id, email: user.email, role: user.role },
         config.jwt.secret,
         { expiresIn: config.jwt.expiresIn }
       );
@@ -284,7 +284,7 @@ async register(req, res) {
       };
 
       // Send email
- transporter.sendMail(mailOptions);
+await transporter.sendMail(mailOptions);
 
       return res.status(200).json({
         success: true,
@@ -334,16 +334,16 @@ async register(req, res) {
       const tokenData = existingTokens[0];
 
       // Check if token is expired
-      if (new Date(tokenData.expires_at) < new Date()) {
-        await db.query("DELETE FROM password_reset_tokens WHERE token = ?", [
-          token,
-        ]);
+const expiresAt = new Date(tokenData.expires_at.replace(" ", "T"));
 
-        return res.status(400).json({
-          success: false,
-          message: "Token has expired. Please request a new password reset link.",
-        });
-      }
+if (expiresAt < new Date()) {
+  await db.query("DELETE FROM password_reset_tokens WHERE token = ?", [token]);
+
+  return res.status(400).json({
+    success: false,
+    message: "Token has expired. Please request a new password reset link.",
+  });
+}
 
       // Get user by email
       const [user] = await db.query("SELECT * FROM users WHERE email = ?", [

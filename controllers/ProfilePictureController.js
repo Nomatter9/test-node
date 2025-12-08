@@ -8,7 +8,7 @@ class ProfilePictureController {
       if (!req.file && !req.body.user_id) {
         return res.status(400).json({
           success: false,
-          message: "No file uploaded, please check if user is selected"
+          message: "No file uploaded, please check if file is selected"
         });
       }
 console.log(req.body)
