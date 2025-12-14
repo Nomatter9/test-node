@@ -4,13 +4,15 @@ const db = require("../config/db");
 const config = require("../config/env");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
+const User = require("../models/user");
+const PasswordResetToken = require("../models/PasswordResetToken");
+const { where } = require("sequelize");
 
 class AuthController {
  // Register new user
 async register(req, res) {
   try {
     const { name, email, password, country } = req.body;
-    console.log(req.body);
 
     // Validate input
     if (!name || !email || !password) {
@@ -21,12 +23,11 @@ async register(req, res) {
     }
 
     // Check if user already exists
-    const [existingUsers] = await db.query(
-      "SELECT id FROM users WHERE email = ?",
-      [email]
-    );
+    const existingUser = await User.findOne({
+      where:{email}
+    });
 
-    if (existingUsers.length > 0) {
+    if (existingUser) {
       return res.status(400).json({
         success: false,
         message: "User with this email already exists",
@@ -38,24 +39,21 @@ async register(req, res) {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user
-    const [result] = await db.query(
-      "INSERT INTO users (name, email, password, country, role) VALUES (?, ?, ?, ?, ?)",
-      [name, email, hashedPassword, country, "User"]
-    );
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { id: result.insertId, email },
-      config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
-    );
-
+  
+const user = await User.create({
+  name,
+  email,
+  password:hashedPassword,
+  country,
+  role: "User",
+})
+  
     // Return success response
     return res.status(201).json({
       success: true,
       message: "Registration successful",
       data: {
-        id: result.insertId,
+        id: user.Id,
         name,
         email,
         token,
@@ -84,18 +82,17 @@ async register(req, res) {
       }
 
       // Check if user exists
-      const [users] = await db.query("SELECT * FROM users WHERE email = ?", [
-        email,
-      ]);
+     
+      const user = await User.scope("withPassword").findOne({
+        where:{email}
+      })
 
-      if (users.length === 0) {
+      if (!user) {
         return res.status(401).json({
           success: false,
           message: "Invalid email or password",
         });
       }
-
-      const user = users[0];
 
       // Verify password
       const isMatch = await bcrypt.compare(password, user.password);
@@ -147,28 +144,27 @@ async register(req, res) {
       }
 
       // Check if email exists and get user name
-      const [existingUsers] = await db.query(
-        "SELECT id, name FROM users WHERE email = ?",
-        [email]
-      );
-
-      if (existingUsers.length <= 0) {
+   
+      const existingUser = await User.findOne({
+        where: {email}
+      })
+      if (!existingUser) {
         return res.status(400).json({
           success: false,
           message: "User with this email does not exist",
         });
       }
 
-      const userName = existingUsers[0].name; 
+      const userName = existingUser.name; 
       const token = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
       // Create token
-      const [result] = await db.query(
-        "INSERT INTO password_reset_tokens (email, token, expires_at) VALUES (?, ?, ?)",
-        [email, token, expiresAt]
-      );
-
+      await PasswordResetToken.create({
+        email,
+        token,
+       expires_at: expiresAt
+      })
       const resetPasswordLink = `${process.env.RESET_PASSWORD_LINK}?token=${token}`;
 
       // Setup transporter
@@ -319,26 +315,26 @@ await transporter.sendMail(mailOptions);
       }
 
       // Check if token exists
-      const [existingTokens] = await db.query(
-        "SELECT * FROM password_reset_tokens WHERE token = ?",
-        [token]
-      );
-
-      if (existingTokens.length === 0) {
+   
+      const existingToken = await PasswordResetToken.findOne({
+        where:{token}
+      })
+      if (!existingToken) {
         return res.status(400).json({
           success: false,
           message: "Invalid or expired token",
         });
       }
 
-      const tokenData = existingTokens[0];
+      const tokenData = existingToken;
 
       // Check if token is expired
-const expiresAt = new Date(tokenData.expires_at.replace(" ", "T"));
-
+const expiresAt = new Date(tokenData.expires_at);
 if (expiresAt < new Date()) {
-  await db.query("DELETE FROM password_reset_tokens WHERE token = ?", [token]);
-
+ const tokenToDelete = await PasswordResetToken.findOne({
+  where:{token}
+})
+await tokenToDelete.destroy()
   return res.status(400).json({
     success: false,
     message: "Token has expired. Please request a new password reset link.",
@@ -346,11 +342,11 @@ if (expiresAt < new Date()) {
 }
 
       // Get user by email
-      const [user] = await db.query("SELECT * FROM users WHERE email = ?", [
-        tokenData.email,
-      ]);
-
-      if (user.length === 0) {
+   
+const user = await User.scope("withPassword").findOne({
+  where:{email : tokenData.email}
+})
+      if (!user) {
         return res.status(404).json({
           success: false,
           message: "User not found",
@@ -360,15 +356,12 @@ if (expiresAt < new Date()) {
       const hashedPassword = await bcrypt.hash(password, 10);
 
       // Update password
-      await db.query("UPDATE users SET password = ? WHERE email = ?", [
-        hashedPassword,
-        tokenData.email,
-      ]);
-
+   await user.update({
+          email :  tokenData.email,
+          password: hashedPassword
+        })
       // Delete token after successful reset
-      await db.query("DELETE FROM password_reset_tokens WHERE token = ?", [
-        token,
-      ]);
+    await existingToken.destroy()
 
       return res.status(200).json({
         success: true,
@@ -386,12 +379,8 @@ if (expiresAt < new Date()) {
   // Get current user profile
   async getProfile(req, res) {
     try {
-      const [users] = await db.query(
-        "SELECT id, name, email, created_at FROM users WHERE id = ?",
-        [req.user.id]
-      );
-
-      if (users.length === 0) {
+  const user = await User.findByPk(req.user.id)
+      if (!user) {
         return res.status(404).json({
           success: false,
           message: "User not found",
@@ -400,7 +389,7 @@ if (expiresAt < new Date()) {
 
       res.json({
         success: true,
-        data: users[0],
+        data: user,
       });
     } catch (error) {
       console.error(error);
