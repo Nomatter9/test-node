@@ -11,13 +11,16 @@ const postsRoutes = require('./routes/posts');
 const reactionsRoutes = require('./routes/reactions');
 // const commentsRoutes = require('./routes/comments');
 const usersProfileRoutes = require('./routes/upload_picture');
+const { sequelize } = require('./models');
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
+sequelize.authenticate()
+.then(()=> console.log("Sequelize connected successfully"))
+.catch(err => console.log( "Sequelize connection error", err))
 // Test database connection
 db.query('SELECT 1')
   .then(() => console.log('Database connected successfully'))

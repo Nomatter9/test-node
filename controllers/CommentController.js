@@ -1,4 +1,9 @@
 const db = require('../config/db');
+const os = require('os');
+const process = require('process');
+const Comment = require('../models/Comment');
+const {Op, where} = require('sequelize')
+
 
 class CommentController {
 
@@ -8,12 +13,11 @@ class CommentController {
 
       const { postId } = req.params;
 
-      const [rows] = await db.query(
-        "SELECT * FROM comments INNER JOIN users ON comments.user_id = users.id WHERE post_id = ?",
-        [postId]
-      );
+      const comments = await Comment.findAll({
+        where: { post_id: postId }
+      } );
 
-      res.json({ success: true, data: rows });
+      res.json({ success: true, data: comments });
     } catch (error) {
       console.error(error);
       res.status(500).json({
@@ -36,15 +40,17 @@ class CommentController {
         });
       }
 
-      const [result] = await db.query(
-        "INSERT INTO comments (comment_body, post_id, user_id) VALUES (?, ?, ?)",
-        [comment_body, post_id, user_id]
-      );
+     await Comment.create({
+      user_id,
+      post_id,
+      comment_body
+      },
+    );
 
       res.status(201).json({
         success: true,
         message: "Comment created successfully",
-        comment_id: result.insertId,
+        comment_id: req.body,
       });
 
     } catch (error) {
@@ -63,6 +69,13 @@ class CommentController {
       const { comment_body } = req.body;
        const user_id = req.user.id; 
        const user_role = req.user.role
+       
+      if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Comment ID is required",
+      });
+    }
 
      
       if (!comment_body) {
@@ -72,28 +85,22 @@ class CommentController {
         });
       }
 
-        if(user_role === "admin"){
-         await db.query(
-        "UPDATE comments SET comment_body = ? WHERE id = ?",
-        [comment_body]
-      );
-      return res.json({
-        success: true,
-        message: "Comment updated by admin",
-      });
-       }
-      const [result] = await db.query(
-        "UPDATE comments SET comment_body = ? WHERE id = ? AND user_id = ?",
-        [comment_body, id, user_id]
-      );
+      const comment = await Comment.findByPk(id);
 
-      if (result.affectedRows === 0) {
+      if (!comment) {
         return res.status(404).json({
           success: false,
           message: "Comment not found",
         });
       }
+       if(req.user.id != comment.user_id && req.user.role != "Superadmin"){
+        return res.status(403).json({
+      success: false,
+      message: "You are not allowed to update this comment ",
+    });
+      }
 
+     await comment.update({comment_body})
       res.json({
         success: true,
         message: "Comment updated successfully",
@@ -115,25 +122,23 @@ class CommentController {
      const user_id = req.user.id;
      const user_role = req.user.role
 
-       if(user_role === "admin"){
-        await db("DELETE FROM comments WHERE id = ?", [comment_id])
-        return res.json({
-          success: true,
-          message: "Comment successfully deleted by Admin",
-        });
-      }
-      const [result] = await db.query(
-        "DELETE FROM comments WHERE id = ? AND user_id = ?",
-        [id, user_id]
-      );
 
-      if (result.affectedRows === 0) {
+      const comment = await Comment.findByPk(id)
+
+      if (!comment) {
         return res.status(404).json({
           success: false,
           message: "Comment not found",
         });
       }
 
+       if(req.user.id != comment.user_id && req.user.role != "Superadmin"){
+        return res.status(403).json({
+      success: false,
+      message: "You are not allowed to update this comment ",
+    });
+  }
+      await comment.destroy()
       res.json({
         success: true,
         message: "Comment deleted successfully",

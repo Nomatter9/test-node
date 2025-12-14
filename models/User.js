@@ -23,7 +23,7 @@ const User = sequelize.define("User",{
         type: DataTypes.STRING,
         defaultValue: "User"
     },
-    profile_Picture:{
+    profile_picture:{
         type: DataTypes.STRING,
         allowNull: true
     },

@@ -1,4 +1,9 @@
 const db = require('../config/db');
+const os = require('os');
+const process = require('process');
+const CommentReaction  = require('../models/Reaction');
+const {Op} = require('sequelize')
+
 
 class CommentReactionController {
 
@@ -23,14 +28,14 @@ console.log({type ,commentId ,user_id});
 //3. no existing reaction - create new
 
 const [existing] = await db.query(
-  "SELECT * FROM comment_reactions WHERE comment_id = ? AND user_id = ?",
+  "SELECT * FROM reactions WHERE comment_id = ? AND user_id = ?",
   [commentId, user_id]
 )
 
 if(existing.length > 0){
         if(existing[0].type == type){
            await db.query(
-        'DELETE FROM comment_reactions WHERE comment_id = ? AND user_id = ?',
+        'DELETE FROM reactions WHERE comment_id = ? AND user_id = ?',
         [commentId, user_id]
       );
         return res.status(200).json({
@@ -40,7 +45,7 @@ if(existing.length > 0){
           });
         }else{
           await db.query(
-              'UPDATE comment_reactions SET type = ? WHERE user_id = ? AND comment_id = ?',
+              'UPDATE reactions SET type = ? WHERE user_id = ? AND comment_id = ?',
               [type, user_id, commentId]
             );
           return res.status(200).json({
@@ -52,7 +57,7 @@ if(existing.length > 0){
         }
 }else{
         await db.query(
-              'INSERT INTO comment_reactions (comment_id,user_id,type) VALUES (?, ?,?)',
+              'INSERT INTO reactions (comment_id,user_id,type) VALUES (?, ?,?)',
               [commentId, user_id, type]
             );
               res.status(201).json({
